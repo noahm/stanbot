@@ -57,70 +57,95 @@ function queueChannelCleanup(channel: Discord.VoiceChannel, timeout = config.sel
   }, timeout * 1000);
 }
 
+function initGuild(guild: Discord.Guild) {
+  if (!guild.available) {
+    console.log(`Skipping unavailable guild: ${guild.name}`);
+    return;
+  }
+
+  const selfServiceCategory = guild.channels.find(c => (
+    c.type === 'category'
+    && c.name.toLocaleLowerCase() === config.selfServeVoice.categoryName.toLocaleLowerCase()
+  )) as Discord.CategoryChannel;
+
+  if (!selfServiceCategory) {
+    console.log(`Could not find self-service category for ${guild.name}`);
+    return;
+  }
+
+  let commandChannelID = '';
+  const emptyChannels: Discord.VoiceChannel[] = [];
+  for (const [channelID, channel] of selfServiceCategory.children) {
+    // find the command channel ID first within the self-service category
+    if (channel.type === 'text' && channel.name.toLocaleLowerCase() === config.selfServeVoice.commandChannelName.toLocaleLowerCase()) {
+      commandChannelID = channelID;
+    } else if (channel.type === 'voice' && (channel as Discord.VoiceChannel).members.size === 0) {
+      emptyChannels.push(channel as Discord.VoiceChannel);
+    }
+  }
+
+  // command channel was not in self-service category, search all channels
+  if (!commandChannelID) {
+    for (const [channelID, channel] of guild.channels) {
+      if (channel.type === 'text' && channel.name.toLocaleLowerCase() === config.selfServeVoice.commandChannelName.toLocaleLowerCase()) {
+        commandChannelID = channelID;
+        break;
+      }
+    }
+  }
+
+  if (!commandChannelID) {
+    console.log(`Could not find command channel for ${guild.name}`);
+    return;
+  }
+
+  activeGuilds[guild.id] = {
+    selfServiceCategoryID: selfServiceCategory.id,
+    commandChannelID,
+    channelTimeouts: {},
+  };
+
+  // now that guild config is set, queue initial timeouts for any empty voice channels in our category
+  for (const channel of emptyChannels) {
+    queueChannelCleanup(channel);
+  }
+}
+
 
 client.on('ready', () => {
   console.log(`Stanbot is now online! Visit here to invite it to your server:`);
   console.log(`https://discordapp.com/oauth2/authorize?client_id=${config.auth.clientID}&scope=bot&permissions=16780304`);
 
   // look at all current guild memberships, find and catalog the IDs for the category and text channel for commands
-  for (const [guildID, guild] of client.guilds) {
-    if (!guild.available) {
-      console.log(`Skipping unavailable guild: ${guild.name}`);
-      continue;
-    }
-
-    const selfServiceCategory = guild.channels.find(c => (
-      c.type === 'category'
-      && c.name.toLocaleLowerCase() === config.selfServeVoice.categoryName.toLocaleLowerCase()
-    )) as Discord.CategoryChannel;
-
-    if (!selfServiceCategory) {
-      console.log(`Could not find self-service category for ${guild.name}`);
-      continue;
-    }
-
-    let commandChannelID = '';
-    const emptyChannels: Discord.VoiceChannel[] = [];
-    for (const [channelID, channel] of selfServiceCategory.children) {
-      // find the command channel ID first within the self-service category
-      if (channel.type === 'text' && channel.name.toLocaleLowerCase() === config.selfServeVoice.commandChannelName.toLocaleLowerCase()) {
-        commandChannelID = channelID;
-      } else if (channel.type === 'voice' && (channel as Discord.VoiceChannel).members.size === 0) {
-        emptyChannels.push(channel as Discord.VoiceChannel);
-      }
-    }
-
-    // command channel was not in self-service category, search all channels
-    if (!commandChannelID) {
-      for (const [channelID, channel] of guild.channels) {
-        if (channel.type === 'text' && channel.name.toLocaleLowerCase() === config.selfServeVoice.commandChannelName.toLocaleLowerCase()) {
-          commandChannelID = channelID;
-          break;
-        }
-      }
-    }
-
-    if (!commandChannelID) {
-      console.log(`Could not find command channel for ${guild.name}`);
-      continue;
-    }
-
-    activeGuilds[guildID] = {
-      selfServiceCategoryID: selfServiceCategory.id,
-      commandChannelID,
-      channelTimeouts: {},
-    };
-
-    // now that guild config is set, queue initial timeouts for any empty voice channels in our category
-    for (const channel of emptyChannels) {
-      queueChannelCleanup(channel);
-    }
-  }
+  client.guilds.forEach(initGuild);
 
   console.log('Ready for action in these servers:');
   for (const guildID of Object.keys(activeGuilds)) {
     console.log('  ' + client.guilds.get(guildID)!.name);
   }
+});
+
+// Handle new joins
+client.on('guildCreate', guild => {
+  const guildConfig = activeGuilds[guild.id];
+  if (guildConfig) {
+    return;
+  }
+  initGuild(guild);
+  console.log(`Joined ${guild.name}!`);
+});
+
+// Handle removal from a server
+client.on('guildDelete', guild => {
+  const guildConfig = activeGuilds[guild.id];
+  if (!guildConfig) {
+    return;
+  }
+  for (const channelID of Object.keys(guildConfig.channelTimeouts)) {
+    clearTimeout(guildConfig.channelTimeouts[channelID]);
+  }
+  delete activeGuilds[guild.id];
+  console.log(`Left ${guild.name}`);
 });
 
 // Watch messages sent
