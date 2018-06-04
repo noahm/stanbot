@@ -1,4 +1,20 @@
-node_modules
-dist
-npm-debug.log
+# Generated files
+dist/
+
+# Secrets
 src/config.ts
+
+# Logs
+npm-debug.log*
+
+# Dependency directories
+node_modules/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
