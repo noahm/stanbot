@@ -11,6 +11,6 @@ anyone join it within a configurable number of seconds will be deleted.
 
 ## Developing
 
+1. `cp src/config.dist.ts src/config.ts` and follow the instructions inside
 1. `npm i`
-1. Follow instructions in `src/config.dist.ts`
 1. `npm start`

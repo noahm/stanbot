@@ -7,7 +7,7 @@
  * https://discordapp.com/developers/applications/me
  */
 export const auth = {
-  clientId: '99999999999',
+  clientID: '99999999999',
   token: 'xxxxxxxxxxxxxx',
 };
 
