@@ -4,7 +4,7 @@
   "description": "bot that makes things nicer in the gwj discord",
   "scripts": {
     "test": "jest",
-    "start": "node dist/stanbot.js",
+    "start": "ts-node src/stanbot.ts",
     "build": "rimraf ./dist && tsc"
   },
   "repository": {
@@ -20,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^10.3.0",
     "rimraf": "^2.6.2",
+    "ts-node": "^6.1.0",
     "typescript": "^2.9.1"
   },
   "dependencies": {

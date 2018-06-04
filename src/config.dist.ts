@@ -1,5 +1,9 @@
 /**
- * Rename this file to config.ts and fill in values from Discord's dev portal
+ * Copy this file's contents to a new config.ts file
+ */
+
+/**
+ * Fill in values from an app on Discord's dev portal here:
  * https://discordapp.com/developers/applications/me
  */
 export const auth = {
