@@ -27,4 +27,9 @@ export const selfServeVoice = {
    * Length of time in seconds that an unused voice channel will exist
    */
   cleanupWindow: 3600 * 48,
+  /**
+   * Length of time in seconds that a newly created voice channel will exist
+   * before it is used for the first time
+   */
+  firstJoinWindow: 60,
 };

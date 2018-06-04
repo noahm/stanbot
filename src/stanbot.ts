@@ -34,7 +34,7 @@ function abortCleanup(channel: Discord.VoiceChannel) {
   }
 }
 
-function queueChannelCleanup(channel: Discord.VoiceChannel) {
+function queueChannelCleanup(channel: Discord.VoiceChannel, timeout = config.selfServeVoice.cleanupWindow) {
   const guildConfig = activeGuilds[channel.guild.id];
   if (!guildConfig) {
     return;
@@ -51,10 +51,10 @@ function queueChannelCleanup(channel: Discord.VoiceChannel) {
     }
 
     if (channel.deletable) {
-      channel.delete(`Has been unused for ${config.selfServeVoice.cleanupWindow} seconds`)
+      channel.delete(`Has gone unused for ${timeout} seconds`)
       .catch(() => console.log(`Failed to delete ${channel.name} from ${channel.guild.name}`));
     }
-  }, config.selfServeVoice.cleanupWindow * 1000);
+  }, timeout * 1000);
 }
 
 
@@ -156,8 +156,8 @@ client.on('message', message => {
   ).then(newChannel => {
     return newChannel.setParent(guildConfig.selfServiceCategoryID);
   }).then(newChannel => {
-    queueChannelCleanup(newChannel as Discord.VoiceChannel);
-    message.react('✔');
+    queueChannelCleanup(newChannel as Discord.VoiceChannel, config.selfServeVoice.firstJoinWindow);
+    message.react('✅');
   }).catch(() => message.react('🙅♀️'));
 
   // TODO: check if user is already in a voice channel and move them to the new channel???
@@ -199,7 +199,7 @@ client.on('channelUpdate', (oldChannel, newChannel) => {
   if (!guildConfig) {
     return;
   }
-  
+
   if (newVoiceChannel.parentID === guildConfig.selfServiceCategoryID && newVoiceChannel.members.size === 0) {
     queueChannelCleanup(newVoiceChannel);
   }
