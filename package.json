@@ -1,0 +1,30 @@
+{
+  "name": "stanbot",
+  "version": "0.1.0",
+  "description": "bot that makes things nicer in the gwj discord",
+  "scripts": {
+    "test": "jest",
+    "start": "node dist/stanbot.js",
+    "build": "rimraf ./dist && tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/noahm/stanbot.git"
+  },
+  "author": "Noah Manneschmidt <noah@manneschmidt.net>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/noahm/stanbot/issues"
+  },
+  "homepage": "https://github.com/noahm/stanbot#readme",
+  "devDependencies": {
+    "@types/node": "^10.3.0",
+    "rimraf": "^2.6.2",
+    "typescript": "^2.9.1"
+  },
+  "dependencies": {
+    "discord.js": "^11.3.2",
+    "erlpack": "github:hammerandchisel/erlpack",
+    "uws": "^10.148.0"
+  }
+}
