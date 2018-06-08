@@ -1,5 +1,5 @@
 import * as readline from 'readline';
-import * as Discord from 'discord.js';
+import * as Discord from 'eris';
 import * as config from './config';
 
 const rl = readline.createInterface({
@@ -7,10 +7,7 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-const client = new Discord.Client({
-  // One noisy event we can safely ignore completely
-  disabledEvents: ['TYPING_START'],
-});
+const client = new Discord.Client(config.auth.token);
 
 interface GuildConfig {
   selfServiceCategoryID: string;
@@ -50,21 +47,15 @@ function queueChannelCleanup(channel: Discord.VoiceChannel, timeout = config.sel
       return;
     }
 
-    if (channel.deletable) {
-      channel.delete(`Has gone unused for ${timeout} seconds`)
-      .catch(() => console.log(`Failed to delete ${channel.name} from ${channel.guild.name}`));
-    }
+    channel.delete(`Has gone unused for ${timeout} seconds`)
+    .catch((e) => console.log(`Failed to delete ${channel.name} from ${channel.guild.name}: ${e}`));
+
   }, timeout * 1000);
 }
 
 function initGuild(guild: Discord.Guild) {
-  if (!guild.available) {
-    console.log(`Skipping unavailable guild: ${guild.name}`);
-    return;
-  }
-
   const selfServiceCategory = guild.channels.find(c => (
-    c.type === 'category'
+    c instanceof Discord.CategoryChannel
     && c.name.toLocaleLowerCase() === config.selfServeVoice.categoryName.toLocaleLowerCase()
   )) as Discord.CategoryChannel;
 
@@ -75,20 +66,20 @@ function initGuild(guild: Discord.Guild) {
 
   let commandChannelID = '';
   const emptyChannels: Discord.VoiceChannel[] = [];
-  for (const [channelID, channel] of selfServiceCategory.children) {
+  for (const [key, channel] of selfServiceCategory.channels || []) {
     // find the command channel ID first within the self-service category
-    if (channel.type === 'text' && channel.name.toLocaleLowerCase() === config.selfServeVoice.commandChannelName.toLocaleLowerCase()) {
-      commandChannelID = channelID;
-    } else if (channel.type === 'voice' && (channel as Discord.VoiceChannel).members.size === 0) {
-      emptyChannels.push(channel as Discord.VoiceChannel);
+    if (channel instanceof Discord.TextChannel && channel.name.toLocaleLowerCase() === config.selfServeVoice.commandChannelName.toLocaleLowerCase()) {
+      commandChannelID = channel.id;
+    } else if (channel instanceof Discord.VoiceChannel && (!channel.voiceMembers || channel.voiceMembers.size === 0)) {
+      emptyChannels.push(channel);
     }
   }
 
   // command channel was not in self-service category, search all channels
   if (!commandChannelID) {
-    for (const [channelID, channel] of guild.channels) {
-      if (channel.type === 'text' && channel.name.toLocaleLowerCase() === config.selfServeVoice.commandChannelName.toLocaleLowerCase()) {
-        commandChannelID = channelID;
+    for (const [key, channel] of guild.channels) {
+      if (channel instanceof Discord.TextChannel && channel.name.toLocaleLowerCase() === config.selfServeVoice.commandChannelName.toLocaleLowerCase()) {
+        commandChannelID = channel.id;
         break;
       }
     }
@@ -111,6 +102,15 @@ function initGuild(guild: Discord.Guild) {
   }
 }
 
+function voiceMemberJoinLeve(member: Discord.Member, newChannel?: Discord.VoiceChannel, oldChannel?: Discord.VoiceChannel) {
+  if (oldChannel && (!oldChannel.voiceMembers || oldChannel.voiceMembers.size === 0)) {
+    queueChannelCleanup(oldChannel);
+  }
+
+  if (newChannel) {
+    abortCleanup(newChannel);
+  }
+}
 
 client.on('ready', () => {
   console.log(`Stanbot is now online! Visit here to invite it to your server:`);
@@ -126,7 +126,7 @@ client.on('ready', () => {
 });
 
 // Handle new joins
-client.on('guildCreate', guild => {
+client.on('guildCreate', (guild: Discord.Guild) => {
   const guildConfig = activeGuilds[guild.id];
   if (guildConfig) {
     return;
@@ -136,7 +136,7 @@ client.on('guildCreate', guild => {
 });
 
 // Handle removal from a server
-client.on('guildDelete', guild => {
+client.on('guildDelete', (guild: Discord.Guild) => {
   const guildConfig = activeGuilds[guild.id];
   if (!guildConfig) {
     return;
@@ -150,13 +150,13 @@ client.on('guildDelete', guild => {
 
 // Watch messages sent
 const playCommand = /^!letsplay (.+)$/;
-client.on('message', message => {
-  if (!message.guild) {
+client.on('messageCreate', (message: Discord.Message) => {
+  if (!(message.channel instanceof Discord.GuildChannel) || !message.member) {
     // TODO: respond to DMs in some way?
     return;
   }
 
-  const guildConfig = activeGuilds[message.guild.id];
+  const guildConfig = activeGuilds[message.channel.guild.id];
   if (!guildConfig) {
     return;
   }
@@ -166,74 +166,57 @@ client.on('message', message => {
     return;
   }
 
-  const commandPieces = message.content.match(playCommand);
+  if (!message.cleanContent) {
+    return;
+  }
+
+  const commandPieces = message.cleanContent.match(playCommand);
   const newChannelName = commandPieces && commandPieces[1] && commandPieces[1].trim();
   if (!newChannelName) {
     // not a valid command
     return;
   }
 
-  message.guild.createChannel(
+  client.createChannel(
+    message.channel.guild.id,
     newChannelName,
-    'voice',
-    undefined,
-    `Requested by ${message.member.displayName}`,
-  ).then(newChannel => {
-    return newChannel.setParent(guildConfig.selfServiceCategoryID);
-  }).then(newChannel => {
+    2,
+    `Requested by ${message.member.username}`,
+    guildConfig.selfServiceCategoryID,
+  ).then((newChannel) => {
     queueChannelCleanup(newChannel as Discord.VoiceChannel, config.selfServeVoice.firstJoinWindow);
-    message.react('✅');
-  }).catch(() => message.react('🙅♀️'));
+    message.addReaction('✅');
+  }).catch(() => message.addReaction('🙅♀️'));
 
   // TODO: check if user is already in a voice channel and move them to the new channel???
 });
 
 // Watch members entering and leaving voice rooms
-client.on('voiceStateUpdate', (oldMember, newMember) => {
-  if (newMember.voiceChannel) {
-    // user was not leaving a channel
-    abortCleanup(newMember.voiceChannel);
-    return;
-  }
-
-  if (!oldMember.voiceChannel) {
-    // neither new member nor old member have a voice channel reference
-    // this makes no sense
-    return;
-  }
-
-  if (oldMember.voiceChannel.members.size !== 0) {
-    // user left, but there are other members
-    return;
-  }
-
-  queueChannelCleanup(oldMember.voiceChannel);
-});
+client.on('voiceChannelJoin', (member, newChannel) => voiceMemberJoinLeve(member, newChannel));
+client.on('voiceChannelLeave', (member, oldChannel) => voiceMemberJoinLeve(member, undefined, oldChannel));
+client.on('voiceChannelSwitch', (member, newChannel, oldChannel) => voiceMemberJoinLeve(member, newChannel, oldChannel));
 
 // Watch channels being moved into our category
-client.on('channelUpdate', (oldChannel, newChannel) => {
-  if (newChannel.type !== 'voice') {
+client.on('channelUpdate', (newChannel) => {
+  if (!(newChannel instanceof Discord.VoiceChannel)) {
     return;
   }
 
-  // Assuming both are voice channels, since channel type is unchangable in discord UI
-  const oldVoiceChannel = oldChannel as Discord.VoiceChannel;
-  const newVoiceChannel = newChannel as Discord.VoiceChannel;
-
-  const guildConfig = activeGuilds[newVoiceChannel.guild.id];
+  const guildConfig = activeGuilds[newChannel.guild.id];
   if (!guildConfig) {
     return;
   }
 
-  if (newVoiceChannel.parentID === guildConfig.selfServiceCategoryID && newVoiceChannel.members.size === 0) {
-    queueChannelCleanup(newVoiceChannel);
+  if (newChannel.parentID === guildConfig.selfServiceCategoryID && (!newChannel.voiceMembers || newChannel.voiceMembers.size === 0)) {
+    queueChannelCleanup(newChannel);
   }
 });
 
-client.login(config.auth.token);
+client.connect();
 
 rl.on('SIGINT', () => {
-  client.destroy()
-  .then(() => process.exit(0))
-  .catch(() => process.exit(1));
+  client.disconnect({
+    reconnect: false,
+  });
+  process.exit(0);
 });
