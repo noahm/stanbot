@@ -90,34 +90,36 @@ export class SelfServeVoice implements Module {
       // 2 simple cases -- Make a role, or make a channel
       switch (commandPieces) {
         case roleCommand: {
+          // Lowercase just to make this easier
+          var roleName = commandArg.toLowerCase();
           // Check if the role already exists
-          if (!message.member.guild.roles.exists("name", commandArg)) {
+          if (!message.member.guild.roles.exists("name", roleName)) {
             message.member.guild.createRole({
-              name: commandArg,
+              name: roleName,
               color: generateHex(),
               permissions: [],
             }).then(function(role)) {
               message.member.addRole(role);
             }
           } else {
-            message.member.addRole(message.member.guild.roles.find("name", commandArg));
+            message.member.addRole(message.member.guild.roles.find("name", roleName));
           }
           
           break;
         }
         case playCommand: {
-      client.createChannel(
-        message.channel.guild.id,
-        commandArg,
-        2,
-        `Requested by ${message.member.username}`,
-        guildConfig.selfServiceCategoryID,
-      ).then((newChannel) => {
-        this.queueChannelCleanup(newChannel as Discord.VoiceChannel, config.firstJoinWindow);
-        message.addReaction('✅');
-      }).catch(() => message.addReaction('🙅♀️'));
+          client.createChannel(
+            message.channel.guild.id,
+            commandArg,
+            2,
+            `Requested by ${message.member.username}`,
+            guildConfig.selfServiceCategoryID,
+          ).then((newChannel) => {
+            this.queueChannelCleanup(newChannel as Discord.VoiceChannel, config.firstJoinWindow);
+            message.addReaction('✅');
+          }).catch(() => message.addReaction('🙅♀️'));
 
-      // TODO: check if user is already in a voice channel and move them to the new channel???
+          // TODO: check if user is already in a voice channel and move them to the new channel???
 
           break;
         }
@@ -128,9 +130,9 @@ export class SelfServeVoice implements Module {
     });
 
     // Watch members entering and leaving voice rooms
-    client.on('voiceChannelJoin', (member, newChannel) => this.voiceMemberJoinLeve(member, newChannel));
-    client.on('voiceChannelLeave', (member, oldChannel) => this.voiceMemberJoinLeve(member, undefined, oldChannel));
-    client.on('voiceChannelSwitch', (member, newChannel, oldChannel) => this.voiceMemberJoinLeve(member, newChannel, oldChannel));
+    client.on('voiceChannelJoin', (member, newChannel) => this.voiceMemberJoinLeave(member, newChannel));
+    client.on('voiceChannelLeave', (member, oldChannel) => this.voiceMemberJoinLeave(member, undefined, oldChannel));
+    client.on('voiceChannelSwitch', (member, newChannel, oldChannel) => this.voiceMemberJoinLeave(member, newChannel, oldChannel));
 
     // Watch channels being moved into our category
     client.on('channelUpdate', (newChannel) => {
@@ -231,7 +233,7 @@ export class SelfServeVoice implements Module {
     }
   }
 
-  private voiceMemberJoinLeve(member: Discord.Member, newChannel?: Discord.VoiceChannel, oldChannel?: Discord.VoiceChannel) {
+  private voiceMemberJoinLeave(member: Discord.Member, newChannel?: Discord.VoiceChannel, oldChannel?: Discord.VoiceChannel) {
     if (oldChannel && (!oldChannel.voiceMembers || oldChannel.voiceMembers.size === 0)) {
       this.queueChannelCleanup(oldChannel);
     }
