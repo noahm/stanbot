@@ -2,6 +2,10 @@ import * as Discord from "eris";
 import { Module } from "./module";
 import { selfServeVoice as config } from './config';
 
+function generateHex() {
+  return '#' + Math.floor(Math.random() * 16777215).toString(16);
+}
+
 interface GuildConfig {
   selfServiceCategoryID: string;
   commandChannelID: string;
@@ -49,7 +53,10 @@ export class SelfServeVoice implements Module {
     });
 
     // Watch messages sent
+    // Available commands:
     const playCommand = /^!letsplay (.+)$/;
+    const roleCommand = /^!iplay (.+)$/;
+    
     client.on('messageCreate', (message: Discord.Message) => {
       if (!(message.channel instanceof Discord.GuildChannel) || !message.member) {
         // TODO: respond to DMs in some way?
@@ -70,16 +77,38 @@ export class SelfServeVoice implements Module {
         return;
       }
 
-      const commandPieces = message.cleanContent.match(playCommand);
-      const newChannelName = commandPieces && commandPieces[1] && commandPieces[1].trim();
-      if (!newChannelName) {
-        // not a valid command
+      // Process commands
+      // Grab the name argument (the only argument)
+      const commandPieces = message.cleanContent;
+      const commandArg = commandPieces && commandPieces[1] && commandPieces[1].trim();
+
+      // No argument is no-op
+      if (!commandArg) {
         return;
       }
 
+      // 2 simple cases -- Make a role, or make a channel
+      switch (commandPieces) {
+        case roleCommand: {
+          // Check if the role already exists
+          if (!message.member.guild.roles.exists("name", commandArg)) {
+            message.member.guild.createRole({
+              name: commandArg,
+              color: generateHex(),
+              permissions: [],
+            }).then(function(role)) {
+              message.member.addRole(role);
+            }
+          } else {
+            message.member.addRole(message.member.guild.roles.find("name", commandArg));
+          }
+          
+          break;
+        }
+        case playCommand: {
       client.createChannel(
         message.channel.guild.id,
-        newChannelName,
+        commandArg,
         2,
         `Requested by ${message.member.username}`,
         guildConfig.selfServiceCategoryID,
@@ -89,6 +118,13 @@ export class SelfServeVoice implements Module {
       }).catch(() => message.addReaction('🙅♀️'));
 
       // TODO: check if user is already in a voice channel and move them to the new channel???
+
+          break;
+        }
+        default: {
+          return;
+        }
+      }
     });
 
     // Watch members entering and leaving voice rooms
