@@ -191,7 +191,11 @@ export class SelfServeVoice implements Module {
 
     guildConfig.channelTimeouts[channel.id] = setTimeout(() => {
       if (channel.parentID !== guildConfig.selfServiceCategoryID) {
-        // abort delete operation if channel is moved
+        // abort delete operation if channel was moved
+        return;
+      }
+      if (channel.voiceMembers && channel.voiceMembers.size) {
+        // abort, we mis-managed state and are about to delete a channel with users in it
         return;
       }
 
