@@ -2,8 +2,8 @@ import * as Discord from "eris";
 import { Module } from "./module";
 import { selfServeVoice as config } from './config';
 
-function generateHex() {
-  return '#' + Math.floor(Math.random() * 16777215).toString(16);
+function generateColor() {
+  return Math.floor(Math.random() * 16777215);
 }
 
 interface GuildConfig {
@@ -18,7 +18,7 @@ interface GuildConfig {
 export class SelfServeVoice implements Module {
   private activeGuilds: Record<string, GuildConfig> = {};
 
-  init(client: Discord.Client) {
+  init(client: Discord.CommandClient) {
     client.on('ready', () => {
       // look at all current guild memberships, find and catalog the IDs for the category and text channel for commands
       client.guilds.forEach(this.initGuild.bind(this));
@@ -56,77 +56,94 @@ export class SelfServeVoice implements Module {
     // Available commands:
     const playCommand = /^!letsplay (.+)$/;
     const roleCommand = /^!iplay (.+)$/;
-    
-    client.on('messageCreate', (message: Discord.Message) => {
+
+    const getCommandMeta = (message: Discord.Message) => {
       if (!(message.channel instanceof Discord.GuildChannel) || !message.member) {
         // TODO: respond to DMs in some way?
-        return;
+        return false;
       }
 
       const guildConfig = this.activeGuilds[message.channel.guild.id];
       if (!guildConfig) {
-        return;
+        return false;
       }
 
       if (message.channel.id !== guildConfig.commandChannelID) {
         // does not come from our dedicated command channel
+        return false;
+      }
+
+      return {
+        guildConfig,
+        guild: message.channel.guild,
+        author: message.member,
+      };
+    }
+
+    client.registerCommand('letsplay', async (message, args) => {
+      const commandMeta = getCommandMeta(message);
+      if (!commandMeta) {
         return;
       }
 
-      if (!message.cleanContent) {
+      const newChannelName = args.join(' ');
+      if (!newChannelName) {
+        // not a valid command
         return;
       }
 
-      // Process commands
-      // Grab the name argument (the only argument)
-      const commandPieces = message.cleanContent;
-      const commandArg = commandPieces && commandPieces[1] && commandPieces[1].trim();
+      try {
+        const newChannel = await client.createChannel(
+          commandMeta.guild.id,
+          newChannelName,
+          2,
+          `Requested by ${commandMeta.author.username}`,
+          commandMeta.guildConfig.selfServiceCategoryID,
+        );
+        this.queueChannelCleanup(newChannel as Discord.VoiceChannel, config.firstJoinWindow);
+        message.addReaction('✅');
+      } catch {
+        message.addReaction('🙅♀️');
+      }
 
-      // No argument is no-op
-      if (!commandArg) {
+      // TODO: check if user is already in a voice channel and move them to the new channel???
+    }, {
+      argsRequired: true,
+      description: 'Create an on-demand voice channel',
+      fullDescription: 'Creates a voice channel that will last for 48h beyond the last time someone was in it.',
+      usage: 'Rocket League',
+    });
+
+    client.registerCommand('iplay', async (message, args) => {
+      const commandMeta = getCommandMeta(message);
+      if (!commandMeta) {
         return;
       }
 
-      // 2 simple cases -- Make a role, or make a channel
-      switch (commandPieces) {
-        case roleCommand: {
-          // Lowercase just to make this easier
-          var roleName = commandArg.toLowerCase();
-          // Check if the role already exists
-          if (!message.member.guild.roles.exists("name", roleName)) {
-            message.member.guild.createRole({
-              name: roleName,
-              color: generateHex(),
-              permissions: [],
-            }).then(function(role)) {
-              message.member.addRole(role);
-            }
-          } else {
-            message.member.addRole(message.member.guild.roles.find("name", roleName));
-          }
-          
-          break;
+      // Lowercase just to make this easier
+      var roleName = args.join(' ').toLocaleLowerCase();
+      try {
+        // Check if the role already exists
+        const role = commandMeta.guild.roles.find(r => r.name.toLocaleLowerCase() === roleName);
+        if (!role) {
+          const newRole = await commandMeta.guild.createRole({
+            name: roleName,
+            color: generateColor(),
+            mentionable: true,
+          }, `Requested by ${commandMeta.author.username}`);
+          await commandMeta.author.addRole(newRole.id);
+        } else {
+          commandMeta.author.addRole(role.id);
         }
-        case playCommand: {
-          client.createChannel(
-            message.channel.guild.id,
-            commandArg,
-            2,
-            `Requested by ${message.member.username}`,
-            guildConfig.selfServiceCategoryID,
-          ).then((newChannel) => {
-            this.queueChannelCleanup(newChannel as Discord.VoiceChannel, config.firstJoinWindow);
-            message.addReaction('✅');
-          }).catch(() => message.addReaction('🙅♀️'));
-
-          // TODO: check if user is already in a voice channel and move them to the new channel???
-
-          break;
-        }
-        default: {
-          return;
-        }
+        message.addReaction('✅');
+      } catch {
+        message.addReaction('🙅♀️');
       }
+    }, {
+      argsRequired: true,
+      description: 'Add a pingable role to yourself',
+      fullDescription: 'Assigns you a role with a given name. Anybody else on the server can ping the role when LFG.',
+      usage: 'PUBG',
     });
 
     // Watch members entering and leaving voice rooms

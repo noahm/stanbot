@@ -1,5 +1,5 @@
 import * as readline from 'readline';
-import { Client } from 'eris';
+import { CommandClient } from 'eris';
 import { auth } from './config';
 import { SelfServeVoice } from './self-serve-voice';
 import { Module } from './module';
@@ -9,10 +9,19 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-const client = new Client(auth.token);
+const client = new CommandClient(auth.token, undefined, {
+  description: 'Making the GWJ discord better since... a few weeks ago?',
+  owner: 'Cathadan',
+  defaultCommandOptions: {
+    cooldown: 1000,
+    cooldownMessage: 'Slow down there, cowpoke!',
+    guildOnly: true,
+  },
+});
+
 client.on('ready', () => {
   console.log(`Stanbot is now online! Visit here to invite it to your server:`);
-  console.log(`https://discordapp.com/oauth2/authorize?client_id=${auth.clientID}&scope=bot&permissions=16780304`);
+  console.log(`https://discordapp.com/oauth2/authorize?client_id=${auth.clientID}&scope=bot&permissions=285215760`);
 });
 
 const modules: Module[] = [
