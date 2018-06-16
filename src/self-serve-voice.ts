@@ -189,6 +189,11 @@ export class SelfServeVoice implements Module {
       return;
     }
 
+    // Clear existing timeout, if it exists
+    if (guildConfig.channelTimeouts[channel.id]) {
+      clearTimeout(guildConfig.channelTimeouts[channel.id]);
+    }
+
     guildConfig.channelTimeouts[channel.id] = setTimeout(() => {
       if (channel.parentID !== guildConfig.selfServiceCategoryID) {
         // abort delete operation if channel was moved
