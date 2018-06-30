@@ -52,11 +52,6 @@ export class SelfServeVoice implements Module {
       console.log(`Left ${guild.name}`);
     });
 
-    // Watch messages sent
-    // Available commands:
-    const playCommand = /^!letsplay (.+)$/;
-    const roleCommand = /^!iplay (.+)$/;
-
     const getCommandMeta = (message: Discord.Message) => {
       if (!(message.channel instanceof Discord.GuildChannel) || !message.member) {
         // TODO: respond to DMs in some way?
@@ -112,6 +107,26 @@ export class SelfServeVoice implements Module {
       description: 'Create an on-demand voice channel',
       fullDescription: 'Creates a voice channel that will last for 48h beyond the last time someone was in it.',
       usage: 'Rocket League',
+    });
+
+    client.registerCommand('beingplayed', async (message, args) => {
+      const commandMeta = getCommandMeta(message);
+      if (!commandMeta) {
+        return;
+      }
+
+      try {
+        // Grab all roles that are @mentionable (not foolproof but best way to ID game playing roles)
+        var playableRoles[];
+        for (var role in commandMeta.guild.roles.array()) {
+          if (role.mentionable) {
+            playableRoles.push(role);
+          }
+        }
+
+        // Reply with the list of playable roles
+        message.reply("The following games are being played:\n" + playableRoles.join('\n'));
+      }
     });
 
     client.registerCommand('iplay', async (message, args) => {
