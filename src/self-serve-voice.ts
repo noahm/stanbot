@@ -52,11 +52,6 @@ export class SelfServeVoice implements Module {
       console.log(`Left ${guild.name}`);
     });
 
-    // Watch messages sent
-    // Available commands:
-    const playCommand = /^!letsplay (.+)$/;
-    const roleCommand = /^!iplay (.+)$/;
-
     const getCommandMeta = (message: Discord.Message) => {
       if (!(message.channel instanceof Discord.GuildChannel) || !message.member) {
         // TODO: respond to DMs in some way?
@@ -114,7 +109,58 @@ export class SelfServeVoice implements Module {
       usage: 'Rocket League',
     });
 
-    client.registerCommand('iplay', async (message, args) => {
+    const roles = client.registerCommand('roles', 'Use `help roles` to see available subcommands', {
+      description: 'Manage pingable roles so you can blow the game horn and summon others to play! 📯',
+      fullDescription: 'Step one: join roles, Step two: ping others with `@rolename`, Step three: play with goodjers!\nUse a subcommand like `@stanbot roles join rolename`',
+    });
+
+    roles.registerSubcommand('list', async (message) => {
+      const commandMeta = getCommandMeta(message);
+      if (!commandMeta) {
+        return;
+      }
+
+      try {
+        // Grab all roles that are @mentionable (not foolproof but best way to ID game playing roles)
+        const playableRoles = commandMeta.guild.roles.filter(r => r.mentionable);
+
+        const rolesWithMembership = playableRoles.map(role => {
+          const memberCount = commandMeta.guild.members.filter(m => m.roles.some(roleID => roleID === role.id)).length;
+          return { role, memberCount };
+        }).sort((a, b) => b.memberCount - a.memberCount);
+
+        // Reply with the list of playable roles
+        message.channel.createMessage({
+          embed: {
+            title: 'Games being played',
+            description: 'Use `@stanbot roles join popular game` to join in!',
+            color: 70 * 255 + 255,
+            fields: [
+              {
+                name: 'Game',
+                inline: true,
+                value: rolesWithMembership.map(item => item.role.name).join('\n'),
+              },
+              {
+                name: 'Players',
+                inline: true,
+                value: rolesWithMembership.map(item => item.memberCount).join('\n'),
+              },
+            ],
+          },
+        });
+      } catch {
+        message.addReaction('🙅♀️');
+      }
+    }, {
+      description: 'Lists the roles others have already used',
+      fullDescription: 'Prints a list of all the rolls that others have joined with this command.',
+      cooldown: 10000,
+      cooldownMessage: 'Maybe try just scrolling up a bit? ;)',
+      cooldownReturns: 1,
+    });
+
+    roles.registerSubcommand('join', async (message, args) => {
       const commandMeta = getCommandMeta(message);
       if (!commandMeta) {
         return;
@@ -141,9 +187,35 @@ export class SelfServeVoice implements Module {
       }
     }, {
       argsRequired: true,
-      description: 'Add a pingable role to yourself',
-      fullDescription: 'Assigns you a role with a given name. Anybody else on the server can ping the role when LFG.',
-      usage: 'PUBG',
+      description: 'Declare yourself ready to answer the game horn 📯',
+      fullDescription: '⬆ Send a message like so.\nAssigns you a role with a given name. Anybody else on the server can blow the game horn by sending a message with `@rolename`',
+      usage: 'rolename',
+    });
+
+    roles.registerSubcommand('leave', (message, args) => {
+      const commandMeta = getCommandMeta(message);
+      if (!commandMeta) {
+        return;
+      }
+
+      // Lowercase just to make this easier
+      var roleName = args.join(' ').toLocaleLowerCase();
+      // Check if the role already exists
+      const guildRole = commandMeta.guild.roles.find(r => r.name === roleName);
+      if (!guildRole) {
+        return 'That role does not exist';
+      }
+      if (!commandMeta.author.roles.some(roleID => roleID === guildRole.id)) {
+        return 'You do not belong to that role';
+      }
+      commandMeta.author.removeRole(guildRole.id)
+        .then(() => message.addReaction('✅'))
+        .catch(() => message.addReaction('🙅♀️'));
+    }, {
+      argsRequired: true,
+      description: 'Remove a role to stop getting notifications',
+      fullDescription: '⬆ Send a message like so.\nRemoves the given role from you so you stop receving notifications for it.',
+      usage: 'rolename',
     });
 
     // Watch members entering and leaving voice rooms
