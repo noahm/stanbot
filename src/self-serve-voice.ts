@@ -117,16 +117,23 @@ export class SelfServeVoice implements Module {
 
       try {
         // Grab all roles that are @mentionable (not foolproof but best way to ID game playing roles)
-        var playableRoles[];
-        for (var role in commandMeta.guild.roles.array()) {
-          if (role.mentionable) {
-            playableRoles.push(role);
-          }
-        }
+        const playableRoles = commandMeta.guild.roles.filter(r => r.mentionable);
+
+        const rolesWithMembership = playableRoles.map(role => {
+          const memberCount = commandMeta.guild.members.filter(m => m.roles.some(roleID => roleID === role.id)).length;
+          return { role, memberCount };
+        }).sort((a, b) => b.memberCount - a.memberCount);
 
         // Reply with the list of playable roles
-        message.reply("The following games are being played:\n" + playableRoles.join('\n'));
+        message.channel.createMessage(
+          'The following games are being played:\n'
+          + rolesWithMembership.map(item => `  **${item.role.name}** (${item.memberCount} members)`).join('\n')
+        );
+      } catch {
+        message.addReaction('🙅♀️');
       }
+    }, {
+      description: 'Lists things other people have used with the `iplay` command',
     });
 
     client.registerCommand('iplay', async (message, args) => {
