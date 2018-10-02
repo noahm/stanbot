@@ -10,7 +10,7 @@ const rl = readline.createInterface({
 });
 
 const client = new CommandClient(auth.token, undefined, {
-  description: 'Making the GWJ discord better since... a few weeks ago?',
+  description: 'Making the GWJ discord better for a while now.',
   owner: 'Cathadan',
   defaultCommandOptions: {
     cooldown: 1000,
