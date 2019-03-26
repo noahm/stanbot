@@ -1,4 +1,5 @@
 import * as Discord from "eris";
+import { logger } from './logger';
 import { Module } from "./module";
 import { selfServeVoice as config } from './config';
 
@@ -23,9 +24,9 @@ export class SelfServeVoice implements Module {
       // look at all current guild memberships, find and catalog the IDs for the category and text channel for commands
       client.guilds.forEach(this.initGuild.bind(this));
 
-      console.log('Ready for action in these servers:');
+      logger.log('Ready for action in these servers:');
       for (const guildID of Object.keys(this.activeGuilds)) {
-        console.log('  ' + client.guilds.get(guildID)!.name);
+        logger.log('  ' + client.guilds.get(guildID)!.name);
       }
     });
 
@@ -36,7 +37,7 @@ export class SelfServeVoice implements Module {
         return;
       }
       this.initGuild(guild);
-      console.log(`Joined ${guild.name}!`);
+      logger.log(`Joined ${guild.name}!`);
     });
 
     // Handle removal from a server
@@ -49,7 +50,7 @@ export class SelfServeVoice implements Module {
         clearTimeout(guildConfig.channelTimeouts[channelID]);
       }
       delete this.activeGuilds[guild.id];
-      console.log(`Left ${guild.name}`);
+      logger.log(`Left ${guild.name}`);
     });
 
     const getCommandMeta = (message: Discord.Message) => {
@@ -277,7 +278,7 @@ export class SelfServeVoice implements Module {
       }
 
       channel.delete(`Has gone unused for ${timeout} seconds`)
-      .catch((e) => console.log(`Failed to delete ${channel.name} from ${channel.guild.name}: ${e}`));
+      .catch((e) => logger.error(`Failed to delete ${channel.name} from ${channel.guild.name}: ${e}`));
 
     }, timeout * 1000);
   }
@@ -289,7 +290,7 @@ export class SelfServeVoice implements Module {
     )) as Discord.CategoryChannel;
 
     if (!selfServiceCategory) {
-      console.log(`Could not find self-service category for ${guild.name}`);
+      logger.error(`Could not find self-service category for ${guild.name}`);
       return;
     }
 
@@ -315,7 +316,7 @@ export class SelfServeVoice implements Module {
     }
 
     if (!commandChannelID) {
-      console.log(`Could not find command channel for ${guild.name}`);
+      logger.error(`Could not find command channel for ${guild.name}`);
       return;
     }
 

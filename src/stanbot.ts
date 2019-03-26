@@ -1,6 +1,7 @@
 import * as readline from 'readline';
 import { CommandClient } from 'eris';
 import { auth } from './config';
+import { logger } from './logger';
 import { SelfServeVoice } from './self-serve-voice';
 import { Module } from './module';
 
@@ -20,8 +21,8 @@ const client = new CommandClient(auth.token, undefined, {
 });
 
 client.on('ready', () => {
-  console.log(`Stanbot is now online! Visit here to invite it to your server:`);
-  console.log(`https://discordapp.com/oauth2/authorize?client_id=${auth.clientID}&scope=bot&permissions=285215760`);
+  logger.log(`Stanbot is now online! Visit here to invite it to your server:`);
+  logger.log(`https://discordapp.com/oauth2/authorize?client_id=${auth.clientID}&scope=bot&permissions=285215760`);
 });
 
 const modules: Module[] = [
