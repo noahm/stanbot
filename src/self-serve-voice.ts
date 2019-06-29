@@ -24,6 +24,8 @@ export class SelfServeVoice implements Module {
       for (const guildID of Object.keys(this.activeGuilds)) {
         logger.log('  ' + client.guilds.get(guildID)!.name);
       }
+
+      client.editStatus(undefined, { name: "#requests, use @Stanbot", type: 2 });
     });
 
     // Handle new joins
