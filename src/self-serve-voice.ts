@@ -224,13 +224,6 @@ export class SelfServeVoice implements Module {
     });
   }
 
-  private abortCleanup(channel: Discord.VoiceChannel) {
-    const guildConfig = this.activeGuilds[channel.guild.id];
-    if (!guildConfig) {
-      return;
-    }
-  }
-
   private initGuild(guild: Discord.Guild) {
     const selfServiceCategory = guild.channels.find(c => (
       c instanceof Discord.CategoryChannel
