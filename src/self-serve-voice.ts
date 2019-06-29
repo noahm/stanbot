@@ -10,10 +10,6 @@ function generateColor() {
 interface GuildConfig {
   selfServiceCategoryID: string;
   commandChannelID: string;
-  /**
-   * Mapping from voice channel ID to timeout handle
-   */
-  channelTimeouts: Record<string, NodeJS.Timer>;
 }
 
 export class SelfServeVoice implements Module {
@@ -45,9 +41,6 @@ export class SelfServeVoice implements Module {
       const guildConfig = this.activeGuilds[guild.id];
       if (!guildConfig) {
         return;
-      }
-      for (const channelID of Object.keys(guildConfig.channelTimeouts)) {
-        clearTimeout(guildConfig.channelTimeouts[channelID]);
       }
       delete this.activeGuilds[guild.id];
       logger.log(`Left ${guild.name}`);
@@ -89,14 +82,13 @@ export class SelfServeVoice implements Module {
       }
 
       try {
-        const newChannel = await client.createChannel(
+        await client.createChannel(
           commandMeta.guild.id,
           newChannelName,
           2,
           `Requested by ${commandMeta.author.username}`,
           commandMeta.guildConfig.selfServiceCategoryID,
         );
-        this.queueChannelCleanup(newChannel as Discord.VoiceChannel, config.firstJoinWindow);
         message.addReaction('✅');
       } catch {
         message.addReaction('🙅♀️');
@@ -219,11 +211,6 @@ export class SelfServeVoice implements Module {
       usage: 'rolename',
     });
 
-    // Watch members entering and leaving voice rooms
-    client.on('voiceChannelJoin', (member, newChannel) => this.voiceMemberJoinLeave(member, newChannel));
-    client.on('voiceChannelLeave', (member, oldChannel) => this.voiceMemberJoinLeave(member, undefined, oldChannel));
-    client.on('voiceChannelSwitch', (member, newChannel, oldChannel) => this.voiceMemberJoinLeave(member, newChannel, oldChannel));
-
     // Watch channels being moved into our category
     client.on('channelUpdate', (newChannel) => {
       if (!(newChannel instanceof Discord.VoiceChannel)) {
@@ -234,10 +221,6 @@ export class SelfServeVoice implements Module {
       if (!guildConfig) {
         return;
       }
-
-      if (newChannel.parentID === guildConfig.selfServiceCategoryID && (!newChannel.voiceMembers || newChannel.voiceMembers.size === 0)) {
-        this.queueChannelCleanup(newChannel);
-      }
     });
   }
 
@@ -246,41 +229,6 @@ export class SelfServeVoice implements Module {
     if (!guildConfig) {
       return;
     }
-    if (guildConfig.channelTimeouts[channel.id]) {
-      clearTimeout(guildConfig.channelTimeouts[channel.id]);
-      delete guildConfig.channelTimeouts[channel.id];
-    }
-  }
-
-  private queueChannelCleanup(channel: Discord.VoiceChannel, timeout = config.cleanupWindow) {
-    const guildConfig = this.activeGuilds[channel.guild.id];
-    if (!guildConfig) {
-      return;
-    }
-
-    if (channel.parentID !== guildConfig.selfServiceCategoryID) {
-      return;
-    }
-
-    // Clear existing timeout, if it exists
-    if (guildConfig.channelTimeouts[channel.id]) {
-      clearTimeout(guildConfig.channelTimeouts[channel.id]);
-    }
-
-    guildConfig.channelTimeouts[channel.id] = setTimeout(() => {
-      if (channel.parentID !== guildConfig.selfServiceCategoryID) {
-        // abort delete operation if channel was moved
-        return;
-      }
-      if (channel.voiceMembers && channel.voiceMembers.size) {
-        // abort, we mis-managed state and are about to delete a channel with users in it
-        return;
-      }
-
-      channel.delete(`Has gone unused for ${timeout} seconds`)
-      .catch((e) => logger.error(`Failed to delete ${channel.name} from ${channel.guild.name}: ${e}`));
-
-    }, timeout * 1000);
   }
 
   private initGuild(guild: Discord.Guild) {
@@ -323,22 +271,6 @@ export class SelfServeVoice implements Module {
     this.activeGuilds[guild.id] = {
       selfServiceCategoryID: selfServiceCategory.id,
       commandChannelID,
-      channelTimeouts: {},
     };
-
-    // now that guild config is set, queue initial timeouts for any empty voice channels in our category
-    for (const channel of emptyChannels) {
-      this.queueChannelCleanup(channel);
-    }
-  }
-
-  private voiceMemberJoinLeave(member: Discord.Member, newChannel?: Discord.VoiceChannel, oldChannel?: Discord.VoiceChannel) {
-    if (oldChannel && (!oldChannel.voiceMembers || oldChannel.voiceMembers.size === 0)) {
-      this.queueChannelCleanup(oldChannel);
-    }
-
-    if (newChannel) {
-      this.abortCleanup(newChannel);
-    }
   }
 }
